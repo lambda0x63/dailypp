@@ -1,5 +1,4 @@
 import { OSU_CLIENT_ID, OSU_CLIENT_SECRET } from '$env/static/private';
-import { DIFFICULTY_FACTOR, MIN_DIFFICULTY, MAP_CRITERIA } from '$lib/types';
 
 let accessToken: string | null = null;
 let tokenExpiry: Date | null = null;
@@ -141,12 +140,10 @@ function calculateDifficultyRange(
 	};
 }
 
-// 최근 선택된 비트맵셋 관리를 위한 유틸리티 함수
 function addRecentBeatmapset(beatmapsetId: string) {
 	recentlySelectedBeatmapsetIds.add(beatmapsetId);
-	// 최대 2개만 저장 (EASY, NORMAL이 선택되었을 때 HARD를 위해)
 	if (recentlySelectedBeatmapsetIds.size > 2) {
-		const firstId = recentlySelectedBeatmapsetIds.values().next().value;
+		const firstId = recentlySelectedBeatmapsetIds.values().next().value as string;
 		recentlySelectedBeatmapsetIds.delete(firstId);
 	}
 }
