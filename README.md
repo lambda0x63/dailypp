@@ -12,7 +12,7 @@
 
 - User PP-based difficulty adjustment
 - Tiered recommendations (Easy, Normal, Hard)
-- Beatmap filtering (planned)
+- Smart algorithm based on your top plays
 
 <h3 align="left">2. Daily Challenges</h3>
 
@@ -44,9 +44,9 @@ difficulty_range = stable_top_play_stars + offset ± margin
 
 <h3 align="left">Difficulty Settings</h3>
 
-- **Easy**: Base - 1.0 ± 0.25
-- **Normal**: Base - 0.25 ± 0.25
-- **Hard**: Base + 0.45 ± 0.25
+- **Easy**: Base - 1.0 ± 0.3
+- **Normal**: Base - 0.5 ± 0.3
+- **Hard**: Base + 0.0 ± 0.3
 
 <h2 align="left">Tech Stack</h2>
 
@@ -59,35 +59,20 @@ difficulty_range = stable_top_play_stars + offset ± margin
 
 <h3 align="left">Backend</h3>
 
-- MongoDB
-- mongoose
+- Upstash Redis (for caching and temporary data)
 - osu! OAuth
 - JWT authentication
+- Vercel serverless functions
 
-<h2 align="left">Development Setup</h2>
 
-1. Clone repository and install dependencies
+**Live Demo**: [dailypp.vercel.app](https://dailypp.vercel.app)
 
-```bash
-git clone https://github.com/root39293/dailypp.git
-cd dailypp
-npm install
-```
+<h2 align="left">Architecture</h2>
 
-2. Set environment variables (.env)
-
-```bash
-VITE_MONGODB_URI="mongodb_uri"
-OSU_CLIENT_ID="your_osu_client_id"
-OSU_CLIENT_SECRET="your_osu_client_secret"
-PUBLIC_BASE_URL="your_vercel_url"
-```
-
-3. Run development server
-
-```bash
-npm run dev
-```
+- **Serverless**: No traditional database required
+- **Redis Caching**: Daily challenges cached with TTL
+- **osu! API Integration**: Real-time user data and beatmap information
+- **Stateless Design**: Scales automatically with traffic
 
 <h2 align="left">License</h2>
 
