@@ -1,70 +1,58 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { connectDB } from '$lib/server/mongoose/connection';
-import { subDays } from 'date-fns';
+import { kv, generateChallengeKey } from '$lib/server/kv';
 import { APIError, errorResponse } from '$lib/server/errors';
-import type { ChallengeMap } from '$lib/types';
-import { ChallengeModel } from '$lib/server/mongoose/models';
-
-interface AggregationResult {
-    _id: ChallengeMap['difficulty'];
-    total: number;
-    completed: number;
-}
+import type { ChallengeData } from '$lib/types';
 
 export const GET: RequestHandler = async ({ locals }) => {
-    if (!locals.user) {
-        throw new APIError('Unauthorized', 401);
-    }
+	if (!locals.user) {
+		throw new APIError('Unauthorized', 401);
+	}
 
-    try {
-        await connectDB();
-        const today = new Date();
-        const thirtyDaysAgo = subDays(today, 30);
+	try {
+		const userId = locals.user.id;
+		const today = new Date();
+		const dates = [];
 
-        const stats = await ChallengeModel.aggregate<AggregationResult>([
-            {
-                $match: {
-                    user_id: locals.user.id,
-                    date: { $gte: thirtyDaysAgo }
-                }
-            },
-            {
-                $unwind: '$challenges'
-            },
-            {
-                $group: {
-                    _id: '$challenges.difficulty',
-                    total: { $sum: 1 },
-                    completed: {
-                        $sum: { $cond: ['$challenges.completed', 1, 0] }
-                    }
-                }
-            }
-        ]);
+		for (let i = 0; i < 30; i++) {
+			const date = new Date(today);
+			date.setDate(date.getDate() - i);
+			dates.push(date.toISOString().split('T')[0]);
+		}
 
-        const formattedStats = {
-            total: 0,
-            completed: 0,
-            byDifficulty: {
-                EASY: { total: 0, completed: 0 },
-                NORMAL: { total: 0, completed: 0 },
-                HARD: { total: 0, completed: 0 }
-            }
-        };
+		// 각 날짜별 챌린지 데이터 가져오기
+		const challengePromises = dates.map((date) =>
+			kv.get<ChallengeData>(generateChallengeKey(userId, date))
+		);
 
-        stats.forEach((stat) => {
-            if (stat._id && stat._id in formattedStats.byDifficulty) {
-                const difficulty = stat._id as keyof typeof formattedStats.byDifficulty;
-                formattedStats.byDifficulty[difficulty].total = stat.total;
-                formattedStats.byDifficulty[difficulty].completed = stat.completed;
-                formattedStats.total += stat.total;
-                formattedStats.completed += stat.completed;
-            }
-        });
+		const challengeResults = await Promise.all(challengePromises);
 
-        return json(formattedStats);
-    } catch (error) {
-        return errorResponse(error);
-    }
-}; 
+		const stats = {
+			total: 0,
+			completed: 0,
+			byDifficulty: {
+				EASY: { total: 0, completed: 0 },
+				NORMAL: { total: 0, completed: 0 },
+				HARD: { total: 0, completed: 0 }
+			}
+		};
+
+		challengeResults.forEach((challenge) => {
+			if (challenge) {
+				challenge.challenges.forEach((c) => {
+					stats.total++;
+					stats.byDifficulty[c.difficulty].total++;
+
+					if (c.completed) {
+						stats.completed++;
+						stats.byDifficulty[c.difficulty].completed++;
+					}
+				});
+			}
+		});
+
+		return json(stats);
+	} catch (error) {
+		return errorResponse(error);
+	}
+};

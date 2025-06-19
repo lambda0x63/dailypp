@@ -1,89 +1,61 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { connectDB } from '$lib/server/mongoose/connection';
-import { startOfDay, endOfDay, subDays } from 'date-fns';
+import { kv, generateChallengeKey } from '$lib/server/kv';
 import { APIError, errorResponse } from '$lib/server/errors';
-import { ChallengeModel, PPHistoryModel } from '$lib/server/mongoose/models';
-import type { ChallengeMap, ChallengeDocument } from '$lib/types';
+import type { ChallengeData } from '$lib/types';
 
 export const GET: RequestHandler = async ({ locals }) => {
-    if (!locals.user) {
-        throw new APIError('Unauthorized', 401);
-    }
+	if (!locals.user) {
+		throw new APIError('Unauthorized', 401);
+	}
 
-    try {
-        await connectDB();
-        const today = new Date();
-        const thirtyDaysAgo = subDays(today, 30);
+	try {
+		const userId = locals.user.id;
+		const today = new Date();
+		const dates = [];
 
-        // 모든 통계를 한 번의 쿼리로 조회
-        const stats = await ChallengeModel.aggregate([
-            {
-                $match: {
-                    user_id: locals.user.id,
-                    date: { $gte: thirtyDaysAgo }
-                }
-            },
-            {
-                $facet: {
-                    dailyStats: [
-                        {
-                            $match: {
-                                date: {
-                                    $gte: startOfDay(today),
-                                    $lte: endOfDay(today)
-                                }
-                            }
-                        },
-                        { $unwind: '$challenges' },
-                        {
-                            $group: {
-                                _id: null,
-                                completed: {
-                                    $sum: { $cond: ['$challenges.completed', 1, 0] }
-                                }
-                            }
-                        }
-                    ],
-                    weeklyStats: [
-                        {
-                            $match: {
-                                date: { $gte: subDays(today, 7) }
-                            }
-                        },
-                        { $unwind: '$challenges' },
-                        {
-                            $group: {
-                                _id: null,
-                                completed: {
-                                    $sum: { $cond: ['$challenges.completed', 1, 0] }
-                                }
-                            }
-                        }
-                    ]
-                }
-            }
-        ]);
+		for (let i = 0; i < 7; i++) {
+			const date = new Date(today);
+			date.setDate(date.getDate() - i);
+			dates.push(date.toISOString().split('T')[0]);
+		}
 
-        // PP 히스토리는 별도로 조회 (캐싱 가능)
-        const ppHistory = await PPHistoryModel.find({
-            user_id: locals.user.id,
-            recorded_at: { $gte: thirtyDaysAgo }
-        })
-        .sort({ recorded_at: 1 })
-        .lean();
+		const challengePromises = dates.map((date) =>
+			kv.get<ChallengeData>(generateChallengeKey(userId, date))
+		);
 
-        const ppGrowth = ppHistory.length >= 2 
-            ? Math.round(ppHistory[ppHistory.length - 1].pp - ppHistory[0].pp)
-            : 0;
+		const challengeResults = await Promise.all(challengePromises);
 
-        return json({
-            weekly_completed: stats[0]?.weeklyStats[0]?.completed || 0,
-            today_completed: stats[0]?.dailyStats[0]?.completed || 0,
-            pp_growth: ppGrowth
-        });
+		let weekly_completed = 0;
+		let today_completed = 0;
+		let current_streak = 0;
 
-    } catch (error) {
-        return errorResponse(error);
-    }
-}; 
+		challengeResults.forEach((challenge, index) => {
+			if (challenge) {
+				const completed = challenge.challenges.filter((c) => c.completed).length;
+				weekly_completed += completed;
+
+				// 오늘 완료 수 (첫 번째가 오늘)
+				if (index === 0) {
+					today_completed = completed;
+				}
+
+				// 연속 완료 계산 (완료된 챌린지가 3개면 그 날은 완주)
+				if (completed === 3) {
+					if (index === current_streak) {
+						current_streak++;
+					}
+				}
+			}
+		});
+
+		return json({
+			weekly_completed,
+			today_completed,
+			current_streak,
+			pp_growth: 0
+		});
+	} catch (error) {
+		return errorResponse(error);
+	}
+};

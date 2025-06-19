@@ -1,54 +1,54 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { connectDB } from '$lib/server/mongoose/connection';
-import { subDays } from 'date-fns';
+import { kv, generateChallengeKey } from '$lib/server/kv';
 import { APIError, errorResponse } from '$lib/server/errors';
-import { osuApi } from '$lib/server/osu-api';
-import { ChallengeModel } from '$lib/server/mongoose/models';
-import type { ChallengeMap } from '$lib/types';
+import type { ChallengeData } from '$lib/types';
 
 export const GET: RequestHandler = async ({ locals }) => {
-    if (!locals.user) {
-        throw new APIError('Unauthorized', 401);
-    }
+	if (!locals.user) {
+		throw new APIError('Unauthorized', 401);
+	}
 
-    try {
-        await connectDB();
-        const today = new Date();
-        const thirtyDaysAgo = subDays(today, 30);
+	try {
+		const userId = locals.user.id;
+		const today = new Date();
+		const dates: string[] = []; // 타입 명시
 
-        const challenges = await ChallengeModel.find({
-            user_id: locals.user.id,
-            date: { $gte: thirtyDaysAgo }
-        })
-        .sort({ date: -1 })
-        .lean();
+		// 지난 30일 날짜 생성
+		for (let i = 0; i < 30; i++) {
+			const date = new Date(today);
+			date.setDate(date.getDate() - i);
+			dates.push(date.toISOString().split('T')[0]);
+		}
 
-        const history = await Promise.all(challenges.map(async (challenge) => {
-            const enrichedChallenges = await Promise.all(challenge.challenges.map(async (c: ChallengeMap) => {
-                try {
-                    const beatmap = await osuApi.getBeatmap(c.beatmap_id);
-                    return {
-                        ...c,
-                        beatmap: {
-                            title: beatmap.title,
-                            version: beatmap.version
-                        }
-                    };
-                } catch (error) {
-                    console.error(`Failed to fetch beatmap ${c.beatmap_id}:`, error);
-                    return c;
-                }
-            }));
+		// 각 날짜별 챌린지 데이터 가져오기
+		const challengePromises = dates.map((date) =>
+			kv.get<ChallengeData>(generateChallengeKey(userId, date))
+		);
 
-            return {
-                date: challenge.date.toISOString(),
-                challenges: enrichedChallenges
-            };
-        }));
+		const challengeResults = await Promise.all(challengePromises);
 
-        return json(history);
-    } catch (error) {
-        return errorResponse(error);
-    }
-}; 
+		const history = challengeResults
+			.map((challenge, index) => {
+				if (!challenge) return null;
+				return {
+					date: dates[index],
+					challenges: challenge.challenges.map((c) => ({
+						beatmap_id: c.beatmap_id,
+						difficulty: c.difficulty,
+						completed: c.completed,
+						completed_at: c.completed_at,
+						beatmap: {
+							title: c.beatmap.title,
+							version: c.beatmap.version
+						}
+					}))
+				};
+			})
+			.filter((item): item is NonNullable<typeof item> => item !== null); // 타입 가드
+
+		return json(history);
+	} catch (error) {
+		return errorResponse(error);
+	}
+};

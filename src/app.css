@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 @layer base {
-  body {
-    @apply min-h-screen;
-  }
-} 
+	body {
+		@apply min-h-screen;
+	}
+}

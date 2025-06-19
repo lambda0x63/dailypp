@@ -1,7 +1,8 @@
 import { sequence } from '@sveltejs/kit/hooks';
 import jwt from 'jsonwebtoken';
 import type { Handle } from '@sveltejs/kit';
-import { OSU_CLIENT_SECRET } from '$env/static/private';
+import { AUTH_SECRET } from '$env/static/private';
+import { DEFAULT_USER_SETTINGS } from '$lib/types';
 
 interface JWTUserPayload {
     id: string;
@@ -23,19 +24,13 @@ export const handleAuth: Handle = async ({ event, resolve }) => {
     
     if (token) {
         try {
-            const decoded = jwt.verify(token, OSU_CLIENT_SECRET) as JWTUserPayload;
+            const decoded = jwt.verify(token, AUTH_SECRET) as JWTUserPayload;
             
             event.locals.user = {
                 id: decoded.id,
                 name: decoded.name,
                 pp_raw: decoded.pp_raw,
-                settings: decoded.settings || {
-                    targetRanks: {
-                        EASY: 'S',
-                        NORMAL: 'A',
-                        HARD: 'B'
-                    }
-                }
+                settings: decoded.settings || DEFAULT_USER_SETTINGS
             };
         } catch (error) {
             console.error('JWT verification failed:', error);
@@ -46,7 +41,6 @@ export const handleAuth: Handle = async ({ event, resolve }) => {
     return resolve(event);
 };
 
-// 에러 핸들링 미들웨어
 const handleErrors: Handle = async ({ event, resolve }) => {
     try {
         return await resolve(event);
@@ -55,11 +49,10 @@ const handleErrors: Handle = async ({ event, resolve }) => {
         return new Response(JSON.stringify({
             error: error instanceof Error ? error.message : 'Internal server error'
         }), {
-            status: error instanceof Error && 'status' in error ? (error as any).status : 500,
+            status: 500,
             headers: { 'Content-Type': 'application/json' }
         });
     }
 };
 
-// 미들웨어 체인
 export const handle = sequence(handleAuth, handleErrors);

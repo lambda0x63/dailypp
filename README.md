@@ -30,12 +30,14 @@
 <h3 align="left">4. Demo Mode (/demo)</h3>
 
 Preview service features without login
+
 - Challenge system preview
 - Dashboard and statistics experience
 
 <h2 align="left">Recommendation Algorithm</h2>
 
 Difficulty is calculated using:
+
 ```
 difficulty_range = stable_top_play_stars + offset ± margin
 ```
@@ -65,6 +67,7 @@ difficulty_range = stable_top_play_stars + offset ± margin
 <h2 align="left">Development Setup</h2>
 
 1. Clone repository and install dependencies
+
 ```bash
 git clone https://github.com/root39293/dailypp.git
 cd dailypp
@@ -72,6 +75,7 @@ npm install
 ```
 
 2. Set environment variables (.env)
+
 ```bash
 VITE_MONGODB_URI="mongodb_uri"
 OSU_CLIENT_ID="your_osu_client_id"
@@ -80,6 +84,7 @@ PUBLIC_BASE_URL="your_vercel_url"
 ```
 
 3. Run development server
+
 ```bash
 npm run dev
 ```

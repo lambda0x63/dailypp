@@ -1,8 +1,8 @@
 <script lang="ts">
-  import type { PageData } from './$types';
-  import Dashboard from '$lib/components/Dashboard.svelte';
+	import type { PageData } from './$types';
+	import Dashboard from '$lib/components/Dashboard.svelte';
 
-  export let data: PageData;
+	export let data: PageData;
 </script>
 
-<Dashboard user={data.user} /> 
+<Dashboard user={data.user} />
